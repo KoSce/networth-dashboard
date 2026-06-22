@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Net Worth Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        colors: {
+          emerald: { 450: '#10b981' },
+          zinc: { 925: '#101012', 875: '#1c1c1f' }
+        }
+      }
+    }
+  }
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.remove('dark');
+  }
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { font-family: 'Inter', system-ui, sans-serif; }
+  body { transition: background-color 0.3s ease, color 0.3s ease; }
+  
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #71717a; }
+  
+  .card {
+    background: white;
+    border: 1px solid #e4e4e7;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  html.dark .card {
+    background: #18181b;
+    border-color: #27272a;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1);
+  }
+  html.dark .card:hover {
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+  }
+  
+  th {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  th:hover { color: #10b981; }
+  .sort-asc::after { content: " ▲"; color: #10b981; font-size: 0.75em; }
+  .sort-desc::after { content: " ▼"; color: #10b981; font-size: 0.75em; }
+  
+  .editable-cell {
+    cursor: pointer;
+    transition: all 0.15s;
+    border-radius: 4px;
+  }
+  .editable-cell:hover {
+    background: rgba(16, 185, 129, 0.08);
+    color: #10b981;
+  }
+  
+  .btn {
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .btn:active { transform: scale(0.97); }
+  
+  .year-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .year-tab.active {
+    background: #10b981;
+    color: white;
+    border-color: #10b981;
+  }
+  .year-tab:not(.active):hover {
+    background: #f4f4f5;
+    border-color: #e4e4e7;
+  }
+  html.dark .year-tab:not(.active):hover {
+    background: #27272a;
+    border-color: #3f3f46;
+  }
+  
+  @media (max-width: 1024px) {
+    .table-container { overflow-x: auto; }
+    .table-container td:first-child,
+    .table-container th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      background: inherit;
+    }
+    html.dark .table-container td:first-child,
+    html.dark .table-container th:first-child { background: #18181b; }
+    .table-container td:first-child,
+    .table-container th:first-child { background: white; }
+  }
+  
+  .fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .goal-progress {
+    height: 6px;
+    border-radius: 3px;
+    background: #e4e4e7;
+    overflow: hidden;
+  }
+  html.dark .goal-progress { background: #27272a; }
+  .goal-progress-bar {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    padding: 1rem 1.5rem;
+    border-radius: 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    z-index: 50;
+    animation: slideIn 0.3s ease-out;
+    backdrop-filter: blur(10px);
+  }
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* Portfolio Selector Styles */
+  #portfolio-selector {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+    min-width: 120px;
+  }
+  html.dark #portfolio-selector {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a1a1aa'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  }
+  #portfolio-selector option {
+    background: white;
+    color: #18181b;
+  }
+  html.dark #portfolio-selector option {
+    background: #18181b;
+    color: #e4e4e7;
+  }
+</style>
+</head>
+<body class="bg-gray-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen p-4 md:p-8">
+
+<div class="max-w-7xl mx-auto fade-in">
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div>
+      <h1 class="text-3xl md:text-4xl font-bold tracking-tight">Net Worth Dashboard</h1>
+      <p class="text-zinc-500 dark:text-zinc-400 mt-1 text-sm" id="subtitle">Track your wealth across time</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex items-center gap-1 mr-1">
+        <select id="portfolio-selector" onchange="switchPortfolio(this.value)" 
+          class="year-tab bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+        </select>
+        <button onclick="addPortfolio()" class="year-tab" title="Add portfolio"><i class="fas fa-user-plus"></i></button>
+        <button onclick="deletePortfolio()" class="year-tab" title="Delete current portfolio"><i class="fas fa-user-minus"></i></button>
+      </div>
+      <div class="w-px h-8 bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
+      <div id="year-tabs" class="flex gap-1 bg-gray-200/50 dark:bg-zinc-800/50 p-1 rounded-xl"></div>
+      <button onclick="addYear()" class="year-tab" title="Add new year"><i class="fas fa-plus"></i></button>
+      <div class="w-px h-8 bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
+      <button onclick="toggleTheme()" class="btn bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2 rounded-xl text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700">
+        <i class="fas fa-moon dark:hidden"></i><i class="fas fa-sun hidden dark:inline"></i>
+      </button>
+      <div class="relative group">
+        <button class="btn bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2 rounded-xl text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700">
+          <i class="fas fa-ellipsis-v"></i>
+        </button>
+        <div class="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
+          <button onclick="exportJSON()" class="w-full text-left px-4 py-3 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"><i class="fas fa-file-code text-zinc-400"></i> Export JSON</button>
+          <button onclick="exportCSV()" class="w-full text-left px-4 py-3 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"><i class="fas fa-file-csv text-zinc-400"></i> Export CSV</button>
+          <div class="h-px bg-zinc-200 dark:bg-zinc-700"></div>
+          <button onclick="importData()" class="w-full text-left px-4 py-3 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"><i class="fas fa-upload text-zinc-400"></i> Import Data</button>
+          <div class="h-px bg-zinc-200 dark:bg-zinc-700"></div>
+          <button onclick="setGoal()" class="w-full text-left px-4 py-3 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"><i class="fas fa-bullseye text-zinc-400"></i> Set Annual Goal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card rounded-3xl p-6 lg:col-span-1">
+      <div class="flex justify-between items-start mb-4">
+        <div>
+          <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">Current Net Worth</p>
+          <p id="total-net" class="text-4xl md:text-5xl font-bold text-emerald-500 dark:text-emerald-400 mt-2 tracking-tight">₦0.00</p>
+        </div>
+        <div class="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold" id="current-badge">—</div>
+      </div>
+      <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+        <i class="fas fa-clock text-xs"></i>
+        <span id="last-updated">Last updated: —</span>
+      </div>
+      <div class="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs text-zinc-500 dark:text-zinc-400">Annual Goal Progress</span>
+          <span class="text-xs font-semibold text-zinc-700 dark:text-zinc-300" id="goal-text">No goal set</span>
+        </div>
+        <div class="goal-progress">
+          <div class="goal-progress-bar" id="goal-bar" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card rounded-3xl p-6 lg:col-span-2">
+      <div class="flex justify-between items-center mb-4">
+        <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">Asset Allocation</p>
+        <span class="text-xs text-zinc-400 dark:text-zinc-500" id="allocation-date">—</span>
+      </div>
+      <div class="flex flex-col md:flex-row items-center gap-6">
+        <div class="w-full md:w-1/2" style="max-height: 200px;">
+          <canvas id="allocation-chart"></canvas>
+        </div>
+        <div id="allocation-legend" class="w-full md:w-1/2 text-sm space-y-2 max-h-48 overflow-y-auto pr-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="card rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center">
+          <i class="fas fa-arrow-trend-up text-emerald-600 dark:text-emerald-400 text-xs"></i>
+        </div>
+        <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">MoM Change</p>
+      </div>
+      <p id="mom-value" class="text-xl md:text-2xl font-bold">—</p>
+      <p id="mom-pct" class="text-xs mt-1 font-medium">—</p>
+    </div>
+    <div class="card rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-500/10 flex items-center justify-center">
+          <i class="fas fa-calendar-check text-blue-600 dark:text-blue-400 text-xs"></i>
+        </div>
+        <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">YTD Change</p>
+      </div>
+      <p id="ytd-value" class="text-xl md:text-2xl font-bold">—</p>
+      <p id="ytd-pct" class="text-xs mt-1 font-medium">—</p>
+    </div>
+    <div class="card rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center">
+          <i class="fas fa-trophy text-emerald-600 dark:text-emerald-400 text-xs"></i>
+        </div>
+        <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">Best Month</p>
+      </div>
+      <p id="best-month" class="text-xl md:text-2xl font-bold">—</p>
+      <p id="best-month-pct" class="text-xs mt-1 font-medium text-emerald-500">—</p>
+    </div>
+    <div class="card rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-500/10 flex items-center justify-center">
+          <i class="fas fa-arrow-trend-down text-red-600 dark:text-red-400 text-xs"></i>
+        </div>
+        <p class="text-zinc-500 dark:text-zinc-400 text-xs font-semibold uppercase tracking-wider">Worst Month</p>
+      </div>
+      <p id="worst-month" class="text-xl md:text-2xl font-bold">—</p>
+      <p id="worst-month-pct" class="text-xs mt-1 font-medium text-red-500">—</p>
+    </div>
+  </div>
+
+  <div class="card rounded-3xl p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">Net Worth Trend</h2>
+      <div class="flex gap-2">
+        <button onclick="setChartType('line')" id="btn-line" class="btn px-3 py-1.5 rounded-lg text-xs bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-medium">Line</button>
+        <button onclick="setChartType('bar')" id="btn-bar" class="btn px-3 py-1.5 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">Bar</button>
+      </div>
+    </div>
+    <div style="height: 300px;">
+      <canvas id="trend-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card rounded-3xl p-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+      <h2 class="text-lg font-semibold">Monthly Breakdown</h2>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="togglePercentView()" id="toggle-pct-btn" class="btn bg-zinc-100 dark:bg-zinc-800 px-4 py-2 rounded-xl text-xs font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700">
+          <i class="fas fa-percent"></i> <span id="pct-btn-text">Show %</span>
+        </button>
+        <button onclick="addNewAsset()" class="btn bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-medium hover:bg-emerald-700">
+          <i class="fas fa-plus"></i> Add Asset
+        </button>
+      </div>
+    </div>
+    <div class="table-container overflow-x-auto -mx-2 px-2">
+      <table class="w-full text-sm" id="asset-table"></table>
+    </div>
+  </div>
+
+  <div class="mt-8 text-center text-xs text-zinc-400 dark:text-zinc-600 pb-4">
+    Data is stored locally in your browser. Export regularly to keep backups.
+  </div>
+</div>
+
+<script>
+const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const palette = ['#10b981','#3b82f6','#8b5cf6','#f59e0b','#ef4444','#ec4899','#14b8a6','#0ea5e9','#f43f5e','#84cc16','#a855f7','#f97316'];
+
+const defaultData = {
+  years: {
+    "2026": {
+      assets: {
+        "Savings (Wife)": [5000000,2000000,2000000,2000000,0,0,0,0,0,0,0,0],
+        "Stocks (USD)": [21106545,18338967,16270621,15694261,0,0,0,0,0,0,0,0],
+        "Stocks (NGN)": [160000,1426692,1755054,2457789,0,0,0,0,0,0,0,0],
+        "PiggyVest (Safelock)": [25000000,25000000,25000000,25000000,0,0,0,0,0,0,0,0],
+        "RiseVest": [25000000,25000000,25000000,25000000,0,0,0,0,0,0,0,0],
+        "Real Estate": [10500000,13500000,13500000,13500000,0,0,0,0,0,0,0,0],
+        "Pension": [12413854,12971846,13044713,13978957,0,0,0,0,0,0,0,0]
+      },
+      goal: 150000000
+    }
+  },
+  currentYear: "2026",
+  theme: "dark"
+};
+
+// ==================== MULTI-PORTFOLIO FEATURE (Additive Only) ====================
+let appData = null;
+let currentPortfolio = "Me";
+
+function migrateData() {
+  const raw = localStorage.getItem('networth_dashboard_v2');
+  let stored = raw ? JSON.parse(raw) : null;
+  if (stored && stored.years && !stored.portfolios) {
+    stored = { currentPortfolio: "Me", portfolios: { "Me": stored } };
+    localStorage.setItem('networth_dashboard_v2', JSON.stringify(stored));
+  }
+  return stored || createDefaultData();
+}
+
+function createDefaultData() {
+  return { currentPortfolio: "Me", portfolios: { "Me": JSON.parse(JSON.stringify(defaultData)) } };
+}
+
+appData = migrateData();
+currentPortfolio = appData.currentPortfolio || "Me";
+let data = appData.portfolios[currentPortfolio] || JSON.parse(JSON.stringify(defaultData));
+if (!appData.portfolios[currentPortfolio]) {
+  appData.portfolios[currentPortfolio] = JSON.parse(JSON.stringify(defaultData));
+  data = appData.portfolios[currentPortfolio];
+}
+
+let currentYear = data.currentYear || Object.keys(data.years)[0];
+let showPercent = false;
+let sortCol = -1;
+let sortDir = 1;
+let allocationChart = null;
+let trendChart = null;
+let chartType = 'line';
+
+function save() {
+  data.currentYear = currentYear;
+  appData.currentPortfolio = currentPortfolio;
+  appData.portfolios[currentPortfolio] = data;
+  localStorage.setItem('networth_dashboard_v2', JSON.stringify(appData));
+  showToast('Saved');
+}
+
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-lg';
+  toast.innerHTML = `<i class="fas fa-check-circle text-emerald-400 dark:text-emerald-600 mr-2"></i>${msg}`;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; setTimeout(() => toast.remove(), 300); }, 2000);
+}
+
+function formatMoney(n) {
+  if (n === 0 || n == null) return "—";
+  return "₦" + Number(n).toLocaleString("en-NG", {minimumFractionDigits: 0, maximumFractionDigits: 0});
+}
+
+function formatCompact(n) {
+  if (n >= 1e9) return "₦" + (n/1e9).toFixed(1) + "B";
+  if (n >= 1e6) return "₦" + (n/1e6).toFixed(1) + "M";
+  if (n >= 1e3) return "₦" + (n/1e3).toFixed(1) + "K";
+  return formatMoney(n);
+}
+
+function getAssets() { return data.years[currentYear]?.assets || {}; }
+function getGoal() { return data.years[currentYear]?.goal || 0; }
+function setGoalVal(v) { if (!data.years[currentYear]) data.years[currentYear] = {assets:{}, goal:0}; data.years[currentYear].goal = v; }
+
+function getCurrentMonthIndex() {
+  const assets = getAssets();
+  let maxIndex = 0;
+  Object.values(assets).forEach(row => {
+    for (let i = 11; i >= 0; i--) { if (row[i] > 0) { maxIndex = Math.max(maxIndex, i); break; } }
+  });
+  return maxIndex;
+}
+
+function getCurrentTotal() {
+  const idx = getCurrentMonthIndex();
+  return Object.values(getAssets()).reduce((sum, row) => sum + (row[idx] || 0), 0);
+}
+
+function getMonthlyTotals() {
+  const totals = new Array(12).fill(0);
+  Object.values(getAssets()).forEach(row => row.forEach((v, i) => totals[i] += (v || 0)));
+  return totals;
+}
+
+function renderYearTabs() {
+  const container = document.getElementById('year-tabs');
+  const years = Object.keys(data.years).sort();
+  container.innerHTML = years.map(y => 
+    `<button onclick="switchYear('${y}')" class="year-tab ${y === currentYear ? 'active' : ''}">${y}</button>`
+  ).join('');
+}
+
+function switchYear(y) {
+  currentYear = y;
+  sortCol = -1;
+  sortDir = 1;
+  renderYearTabs();
+  renderAll();
+}
+
+function addYear() {
+  const y = prompt("Enter year (e.g., 2027):");
+  if (!y || !/^[0-9]{4}$/.test(y)) { alert("Please enter a valid 4-digit year."); return; }
+  if (data.years[y]) { alert("Year already exists."); return; }
+  data.years[y] = { assets: {}, goal: 0 };
+  currentYear = y;
+  renderYearTabs();
+  renderAll();
+  save();
+}
+
+function updateStats() {
+  const idx = getCurrentMonthIndex();
+  const totals = getMonthlyTotals();
+  const current = totals[idx];
+  const prev = idx > 0 ? totals[idx-1] : current;
+  const jan = totals[0];
+
+  const mom = current - prev;
+  const momPct = prev !== 0 ? (mom/prev)*100 : 0;
+  const momEl = document.getElementById("mom-value");
+  momEl.innerHTML = mom >= 0 ? `<span class="text-emerald-500">▲</span> ${formatMoney(Math.abs(mom))}` : `<span class="text-red-500">▼</span> ${formatMoney(Math.abs(mom))}`;
+  momEl.className = "text-xl md:text-2xl font-bold " + (mom >= 0 ? "text-emerald-500" : "text-red-500");
+  document.getElementById("mom-pct").textContent = `${mom >= 0 ? '+' : ''}${momPct.toFixed(2)}% vs last month`;
+  document.getElementById("mom-pct").className = "text-xs mt-1 font-medium " + (mom >= 0 ? "text-emerald-500" : "text-red-500");
+
+  const ytd = current - jan;
+  const ytdPct = jan !== 0 ? (ytd/jan)*100 : 0;
+  const ytdEl = document.getElementById("ytd-value");
+  ytdEl.innerHTML = ytd >= 0 ? `<span class="text-emerald-500">▲</span> ${formatMoney(Math.abs(ytd))}` : `<span class="text-red-500">▼</span> ${formatMoney(Math.abs(ytd))}`;
+  ytdEl.className = "text-xl md:text-2xl font-bold " + (ytd >= 0 ? "text-emerald-500" : "text-red-500");
+  document.getElementById("ytd-pct").textContent = `${ytd >= 0 ? '+' : ''}${ytdPct.toFixed(2)}% since Jan`;
+  document.getElementById("ytd-pct").className = "text-xs mt-1 font-medium " + (ytd >= 0 ? "text-emerald-500" : "text-red-500");
+
+  let bestGain = -Infinity, worstGain = Infinity, bestM = -1, worstM = -1;
+  for(let i=1; i<=idx; i++) {
+    let diff = totals[i] - totals[i-1];
+    if(diff > bestGain) { bestGain = diff; bestM = i; }
+    if(diff < worstGain) { worstGain = diff; worstM = i; }
+  }
+  document.getElementById("best-month").textContent = bestM !== -1 ? months[bestM] : "—";
+  document.getElementById("best-month-pct").textContent = bestM !== -1 ? `+${formatMoney(bestGain)}` : "—";
+  document.getElementById("worst-month").textContent = worstM !== -1 ? months[worstM] : "—";
+  document.getElementById("worst-month-pct").textContent = worstM !== -1 ? formatMoney(worstGain) : "—";
+
+  const goal = getGoal();
+  const goalBar = document.getElementById('goal-bar');
+  const goalText = document.getElementById('goal-text');
+  if (goal > 0) {
+    const pct = Math.min(100, (current / goal) * 100);
+    goalBar.style.width = pct + '%';
+    goalText.textContent = `${formatCompact(current)} / ${formatCompact(goal)} (${pct.toFixed(1)}%)`;
+  } else {
+    goalBar.style.width = '0%';
+    goalText.textContent = 'No goal set';
+  }
+
+  document.getElementById('current-badge').textContent = months[idx] + " " + currentYear;
+  document.getElementById('subtitle').textContent = `Tracking ${Object.keys(getAssets()).length} assets · ${months[idx]} ${currentYear}`;
+}
+
+function renderTable() {
+  const assets = getAssets();
+  const currentIdx = getCurrentMonthIndex();
+  const totals = getMonthlyTotals();
+  const keys = Object.keys(assets);
+  
+  let html = `<thead><tr class="border-b border-zinc-200 dark:border-zinc-800">`;
+  html += `<th onclick="sortTable(-1)" class="text-left py-3 px-3 font-semibold text-zinc-500 dark:text-zinc-400 text-xs uppercase tracking-wider whitespace-nowrap ${sortCol === -1 ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : ''}">Asset</th>`;
+  months.forEach((m, i) => {
+    const isFuture = i > currentIdx;
+    html += `<th onclick="sortTable(${i})" class="text-right py-3 px-2 font-semibold text-zinc-500 dark:text-zinc-400 text-xs uppercase tracking-wider ${isFuture ? 'opacity-40' : ''} ${sortCol === i ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : ''}">${m}</th>`;
+  });
+  html += `<th class="text-right py-3 px-2 font-semibold text-zinc-500 dark:text-zinc-400 text-xs uppercase tracking-wider">YTD %</th>`;
+  html += `<th class="w-10"></th></tr></thead><tbody>`;
+
+  let sortedKeys = [...keys];
+  if (sortCol === -1) sortedKeys.sort((a,b) => sortDir * a.localeCompare(b));
+  else sortedKeys.sort((a,b) => sortDir * ((assets[b]?.[sortCol] || 0) - (assets[a]?.[sortCol] || 0)));
+
+  sortedKeys.forEach((asset, aidx) => {
+    const row = assets[asset];
+    html += `<tr class="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">`;
+    html += `<td class="py-3 px-3 font-medium whitespace-nowrap editable-cell" title="Click to rename" onclick="editAssetName(this, '${asset.replace(/'/g, "\\'")}')">${asset} <i class="fas fa-pencil-alt text-[10px] text-zinc-300 dark:text-zinc-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"></i></td>`;
+    
+    row.forEach((val, i) => {
+      const isFuture = i > currentIdx;
+      let display;
+      if (showPercent && i > 0 && totals[i] > 0) {
+        display = (val === 0) ? "—" : `${((val/totals[i])*100).toFixed(1)}%`;
+      } else {
+        display = (val === 0 && isFuture) ? "—" : formatMoney(val);
+      }
+      const opacity = isFuture ? 'opacity-40' : '';
+      html += `<td class="text-right py-3 px-2 ${opacity} editable-cell tabular-nums" title="Click to edit" onclick="editCell(this,'${asset.replace(/'/g, "\\'")}',${i})">${display}</td>`;
+    });
+    
+    const change = row[0] > 0 ? ((row[currentIdx]-row[0])/row[0])*100 : 0;
+    html += `<td class="text-right px-2 font-semibold ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}">${change.toFixed(1)}%</td>`;
+    html += `<td class="text-center"><button onclick="deleteAsset('${asset.replace(/'/g, "\\'")}')" class="text-zinc-300 hover:text-red-500 transition-colors p-1"><i class="fas fa-trash text-xs"></i></button></td></tr>`;
+  });
+
+  html += `<tr class="bg-zinc-50 dark:bg-zinc-800/50 font-bold text-zinc-900 dark:text-zinc-100"><td class="py-3 px-3">TOTAL</td>`;
+  totals.forEach(t => html += `<td class="text-right py-3 px-2 tabular-nums">${formatMoney(t)}</td>`);
+  html += `<td colspan="2"></td></tr></tbody>`;
+
+  document.getElementById("asset-table").innerHTML = html;
+  document.getElementById("total-net").textContent = formatMoney(getCurrentTotal());
+  document.getElementById("last-updated").textContent = `Last updated: ${months[currentIdx]} ${currentYear}`;
+  document.getElementById("allocation-date").textContent = months[currentIdx] + " " + currentYear;
+  updateStats();
+  updateCharts();
+}
+
+function updateCharts() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const currentIdx = getCurrentMonthIndex();
+  const totals = getMonthlyTotals();
+  const assets = getAssets();
+  const textColor = isDark ? '#a1a1aa' : '#71717a';
+  const gridColor = isDark ? '#27272a' : '#e4e4e7';
+
+  const ctx1 = document.getElementById('allocation-chart');
+  const activeData = {};
+  Object.keys(assets).forEach(k => { if(assets[k][currentIdx] > 0) activeData[k] = assets[k][currentIdx]; });
+  
+  if (allocationChart) allocationChart.destroy();
+  allocationChart = new Chart(ctx1, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(activeData),
+      datasets: [{ 
+        data: Object.values(activeData), 
+        backgroundColor: palette, 
+        borderWidth: 2, 
+        borderColor: isDark ? '#18181b' : '#fff',
+        hoverOffset: 8
+      }]
+    },
+    options: { 
+      cutout: '72%', 
+      responsive: true, 
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const val = ctx.raw;
+            const pct = ((val / totals[currentIdx]) * 100).toFixed(1);
+            return ` ${formatMoney(val)} (${pct}%)`;
+          }
+        }
+      }}
+    }
+  });
+
+  let legendHtml = '';
+  const total = totals[currentIdx];
+  Object.keys(activeData).forEach((k, i) => {
+    const val = activeData[k];
+    const p = ((val/total)*100).toFixed(1);
+    const color = palette[i % palette.length];
+    legendHtml += `
+      <div class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-default">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-3 h-3 rounded-sm flex-shrink-0" style="background:${color}"></div>
+          <span class="truncate text-zinc-700 dark:text-zinc-300">${k}</span>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="font-semibold text-zinc-900 dark:text-zinc-100">${formatCompact(val)}</div>
+          <div class="text-xs text-zinc-400">${p}%</div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('allocation-legend').innerHTML = legendHtml || '<div class="text-zinc-400 text-center py-8">No assets with values</div>';
+
+  const ctx2 = document.getElementById('trend-chart');
+  if (trendChart) trendChart.destroy();
+  const labels = months.slice(0, currentIdx+1);
+  const dataPoints = totals.slice(0, currentIdx+1);
+  
+  trendChart = new Chart(ctx2, {
+    type: chartType,
+    data: {
+      labels: labels,
+      datasets: [{ 
+        label: 'Net Worth', 
+        data: dataPoints, 
+        borderColor: '#10b981', 
+        backgroundColor: chartType === 'line' ? 'rgba(16, 185, 129, 0.08)' : palette.map((c, i) => i === currentIdx ? '#10b981' : c + '80'),
+        fill: chartType === 'line',
+        tension: 0.4,
+        borderWidth: 3,
+        pointRadius: chartType === 'line' ? 4 : 0,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#10b981',
+        pointBorderWidth: 2,
+        borderRadius: chartType === 'bar' ? 4 : 0
+      }]
+    },
+    options: {
+      responsive: true, 
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      scales: {
+        y: { 
+          ticks: { 
+            color: textColor, 
+            callback: v => formatCompact(v),
+            font: { size: 11 }
+          }, 
+          grid: { color: gridColor, drawBorder: false } 
+        },
+        x: { 
+          ticks: { color: textColor, font: { size: 11 } }, 
+          grid: { display: false, drawBorder: false } 
+        }
+      },
+      plugins: { 
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: isDark ? '#27272a' : '#fff',
+          titleColor: isDark ? '#fff' : '#18181b',
+          bodyColor: isDark ? '#a1a1aa' : '#52525b',
+          borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8,
+          callbacks: {
+            label: (ctx) => ' ' + formatMoney(ctx.raw)
+          }
+        }
+      }
+    }
+  });
+}
+
+function setChartType(type) {
+  chartType = type;
+  document.getElementById('btn-line').className = type === 'line' 
+    ? 'btn px-3 py-1.5 rounded-lg text-xs bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-medium'
+    : 'btn px-3 py-1.5 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium';
+  document.getElementById('btn-bar').className = type === 'bar'
+    ? 'btn px-3 py-1.5 rounded-lg text-xs bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-medium'
+    : 'btn px-3 py-1.5 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium';
+  updateCharts();
+}
+
+function toggleTheme() {
+  document.documentElement.classList.toggle('dark');
+  const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  localStorage.setItem('theme', theme);
+  updateCharts();
+}
+
+window.editAssetName = function(td, oldName) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = oldName;
+  input.className = "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white w-full px-2 py-1 border-2 border-emerald-500 rounded-lg focus:outline-none text-sm font-medium";
+  
+  const saveName = () => {
+    const newName = input.value.trim();
+    if (newName && newName !== oldName) {
+      if (getAssets()[newName]) {
+        alert("An asset with this name already exists.");
+        renderTable(); return;
+      }
+      getAssets()[newName] = [...getAssets()[oldName]];
+      delete getAssets()[oldName];
+      save();
+    }
+    renderTable();
+  };
+
+  input.onblur = saveName;
+  input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); if(e.key === 'Escape') renderTable(); };
+  
+  td.innerHTML = ""; 
+  td.onclick = null;
+  td.appendChild(input); 
+  input.focus();
+  input.select();
+};
+
+window.editCell = function(td, asset, i) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = getAssets()[asset][i];
+  input.className = "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white w-full text-right px-2 py-1 border-2 border-emerald-500 rounded-lg focus:outline-none text-sm tabular-nums";
+  input.onblur = () => { 
+    const val = parseFloat(input.value) || 0;
+    getAssets()[asset][i] = val; 
+    save();
+    renderTable(); 
+  };
+  input.onkeydown = (e) => { 
+    if(e.key === 'Enter') input.blur(); 
+    if(e.key === 'Escape') renderTable();
+    if(e.key === 'Tab') {
+      e.preventDefault();
+      const assets = getAssets();
+      const keys = Object.keys(assets);
+      const idx = keys.indexOf(asset);
+      if (i < 11) {
+        setTimeout(() => {
+          const nextTd = td.nextElementSibling;
+          if (nextTd && nextTd.onclick) nextTd.onclick();
+        }, 10);
+      } else if (idx < keys.length - 1) {
+        setTimeout(() => {
+          const rows = document.querySelectorAll('#asset-table tbody tr');
+          if (rows[idx+1]) {
+            const cell = rows[idx+1].querySelectorAll('td')[1];
+            if (cell && cell.onclick) cell.onclick();
+          }
+        }, 10);
+      }
+    }
+  };
+  
+  td.innerHTML = ""; 
+  td.onclick = null;
+  td.appendChild(input); 
+  input.focus();
+  input.select();
+};
+
+window.addNewAsset = function() {
+  let n = prompt("Asset Name:");
+  if(n) {
+    n = n.trim();
+    if (getAssets()[n]) { alert("An asset with this name already exists."); return; }
+    getAssets()[n] = new Array(12).fill(0); 
+    save();
+    renderTable(); 
+  }
+};
+
+window.deleteAsset = function(n) { 
+  if(confirm(`Delete "${n}" and all its data?`)) { 
+    delete getAssets()[n]; 
+    save();
+    renderTable(); 
+  } 
+};
+
+window.sortTable = function(c) { 
+  if(sortCol===c) sortDir*=-1; 
+  else { sortCol=c; sortDir=c===-1?1:-1; } 
+  renderTable(); 
+};
+
+window.togglePercentView = function() { 
+  showPercent = !showPercent; 
+  document.getElementById('pct-btn-text').textContent = showPercent ? "Show ₦" : "Show %";
+  renderTable(); 
+};
+
+window.setGoal = function() {
+  const current = getGoal();
+  const val = prompt("Set annual net worth goal (₦):", current > 0 ? current : "");
+  if (val === null) return;
+  const num = parseFloat(val.replace(/,/g, ''));
+  if (isNaN(num)) { alert("Please enter a valid number."); return; }
+  setGoalVal(num);
+  save();
+  renderAll();
+};
+
+window.exportJSON = function() {
+  const blob = new Blob([JSON.stringify(appData, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `networth-all-portfolios-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('All portfolios exported');
+};
+
+window.exportCSV = function() {
+  const assets = getAssets();
+  const keys = Object.keys(assets);
+  let csv = "Asset," + months.join(",") + ",YTD %\n";
+  keys.forEach(k => {
+    const row = assets[k];
+    const currentIdx = getCurrentMonthIndex();
+    const change = row[0] > 0 ? ((row[currentIdx]-row[0])/row[0])*100 : 0;
+    csv += `"${k}",${row.join(",")},${change.toFixed(1)}%\n`;
+  });
+  csv += `TOTAL,${getMonthlyTotals().join(",")},\n`;
+  
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `networth-${currentYear}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('CSV Exported');
+};
+
+window.importData = function() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => { 
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (imported.portfolios && imported.currentPortfolio) {
+          appData = imported;
+          currentPortfolio = appData.currentPortfolio;
+          data = appData.portfolios[currentPortfolio];
+        } else if (imported.years) {
+          appData = { currentPortfolio: "Me", portfolios: { "Me": imported } };
+          data = imported;
+          currentPortfolio = "Me";
+        } else {
+          alert("Invalid file format.");
+          return;
+        }
+        currentYear = data.currentYear || Object.keys(data.years)[0];
+        sortCol = -1;
+        sortDir = 1;
+        showPercent = false;
+        renderPortfolioSelector();
+        renderAll();
+        save();
+        showToast('Data imported');
+      } catch(err) {
+        alert("Error reading file.");
+      }
+    };
+    reader.readAsText(e.target.files[0]);
+  };
+  input.click();
+};
+
+function renderAll() {
+  renderPortfolioSelector();
+  renderYearTabs();
+  renderTable();
+}
+
+// ==================== PORTFOLIO UI FUNCTIONS ====================
+
+function renderPortfolioSelector() {
+  const sel = document.getElementById('portfolio-selector');
+  if (!sel) return;
+  const names = Object.keys(appData.portfolios).sort();
+  sel.innerHTML = names.map(p => 
+    `<option value="${p}" ${p === currentPortfolio ? 'selected' : ''}>${p}</option>`
+  ).join('');
+}
+
+function switchPortfolio(name) {
+  if (!appData.portfolios[name] || name === currentPortfolio) return;
+  appData.portfolios[currentPortfolio] = JSON.parse(JSON.stringify(data));
+  currentPortfolio = name;
+  data = appData.portfolios[name];
+  currentYear = data.currentYear || Object.keys(data.years)[0];
+  sortCol = -1;
+  sortDir = 1;
+  showPercent = false;
+  renderPortfolioSelector();
+  renderAll();
+  save();
+  showToast(`Switched to ${name}`);
+}
+
+function addPortfolio() {
+  let name = prompt("Portfolio name (e.g., Wife, Sister A, Sister B):");
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  if (appData.portfolios[name]) {
+    alert("A portfolio with this name already exists.");
+    return;
+  }
+  const templateYear = data.years[currentYear];
+  const emptyAssets = {};
+  if (templateYear && templateYear.assets) {
+    Object.keys(templateYear.assets).forEach(k => {
+      emptyAssets[k] = new Array(12).fill(0);
+    });
+  }
+  appData.portfolios[name] = {
+    years: { [currentYear]: { assets: emptyAssets, goal: 0 } },
+    currentYear: currentYear,
+    theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  };
+  switchPortfolio(name);
+  save();
+}
+
+function deletePortfolio() {
+  const names = Object.keys(appData.portfolios);
+  if (names.length <= 1) {
+    alert("You must keep at least one portfolio.");
+    return;
+  }
+  if (!confirm(`Delete portfolio "${currentPortfolio}" and all its data? This cannot be undone.`)) return;
+  delete appData.portfolios[currentPortfolio];
+  currentPortfolio = Object.keys(appData.portfolios)[0];
+  data = appData.portfolios[currentPortfolio];
+  currentYear = data.currentYear || Object.keys(data.years)[0];
+  sortCol = -1;
+  sortDir = 1;
+  showPercent = false;
+  renderPortfolioSelector();
+  renderAll();
+  save();
+  showToast(`Portfolio deleted. Now viewing ${currentPortfolio}.`);
+}
+
+// ==================== END MULTI-PORTFOLIO FEATURE ====================
+
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 's') { e.preventDefault(); exportJSON(); }
+    if (e.key === 'o') { e.preventDefault(); importData(); }
+    if (e.key === 'n') { e.preventDefault(); addNewAsset(); }
+  }
+});
+
+// Init
+renderAll();
+</script>
+</body>
+</html>
